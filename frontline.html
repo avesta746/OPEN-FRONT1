@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frontline</title>
+<style>
+:root{--bg:#0a1424;--card:#12213a;--line:#264068;--ac:#e8b84a;--tx:#e8eef8;--mu:#8fa3c4}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 "Trebuchet MS",Verdana,sans-serif;min-height:100vh}
+.scr{display:none;padding:28px 18px;max-width:880px;margin:auto}.scr.on{display:block}
+h1{font:900 clamp(34px,8vw,64px)/1 Georgia,serif;text-align:center;margin:30px 0 8px;letter-spacing:.04em}
+.sub{text-align:center;color:var(--mu);margin-bottom:28px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+.card{background:var(--card);border:2px solid var(--line);border-radius:6px;padding:30px 20px;text-align:center;cursor:pointer;font:700 22px Georgia,serif;color:var(--tx)}
+.card small{display:block;font:400 14px sans-serif;color:var(--mu);margin-top:8px}
+.card:hover,.card:focus-visible{border-color:var(--ac);outline:none}
+button,input,select{font:inherit;color:var(--tx);background:#0e1a2f;border:1px solid var(--line);border-radius:6px;padding:10px 14px}
+button.go{background:var(--ac);color:#1a1405;font-weight:700;border:0;cursor:pointer}
+button.go:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--ac)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}
+.maps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.map{border:2px solid var(--line);border-radius:6px;padding:6px;cursor:pointer;text-align:center;background:var(--card)}
+.map.sel{border-color:var(--ac)}.map canvas{width:100%;image-rendering:pixelated;border-radius:3px;display:block}
+.lob{display:flex;justify-content:space-between;width:100%;text-align:left;margin:6px 0;cursor:pointer}
+.code{font:900 56px Georgia,serif;letter-spacing:.2em;text-align:center;color:var(--ac)}
+.note{color:var(--mu);font-size:13px}
+#game{padding:0;max-width:none;position:relative}
+#cv{display:block;margin:auto;image-rendering:pixelated;background:#0b2a4a;width:min(100vw,calc((100vh - 84px)*1.6667));cursor:crosshair}
+#lb{position:absolute;top:8px;right:8px;background:#0a1424cc;padding:8px 10px;border-radius:6px;font-size:13px;min-width:140px}
+#lb i{display:inline-block;width:10px;height:10px;margin-right:6px;border-radius:2px}
+#bar{display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;padding:12px;height:84px}
+#end{display:none;position:absolute;inset:0;background:#0a1424e6;align-items:center;justify-content:center;flex-direction:column;gap:16px;font:700 36px Georgia,serif;text-align:center}
+</style></head><body>
+
+<section class="scr on" id="home">
+<h1>FRONTLINE</h1><p class="sub">Spawn. Expand. Conquer the map.</p>
+<div class="row" style="justify-content:center"><input id="nm" placeholder="Your name" maxlength="14"></div>
+<div class="cards">
+<button class="card" id="bCreate">Create Lobby<small>Pick a map, add bots, invite friends</small></button>
+<button class="card" id="bJoin">Join Lobby<small>Enter a code or pick an open lobby</small></button>
+</div></section>
+
+<section class="scr" id="create">
+<h2>Create Lobby</h2>
+<div class="maps" id="maps"></div>
+<div class="row"><label>Bots <input id="bots" type="number" min="0" max="24" value="10" style="width:80px"></label>
+<button class="go" id="bOpen">Open lobby</button><button id="bBack1">Back</button></div></section>
+
+<section class="scr" id="join">
+<h2>Join Lobby</h2>
+<div class="row"><input id="jc" placeholder="Code" maxlength="4" style="width:110px;text-transform:uppercase"><button class="go" id="bJC">Join</button><button id="bBack2">Back</button></div>
+<div id="open"></div>
+<p class="note">Lobbies appear here when they are open in another tab or window of this browser. Playing across devices needs a game server.</p></section>
+
+<section class="scr" id="lobby">
+<h2>Lobby</h2><div class="code" id="lcode"></div>
+<p class="sub" id="linfo"></p><div id="roster"></div>
+<div class="row"><button class="go" id="bStart">Start game</button><button id="bLeave">Leave</button></div></section>
+
+<section class="scr" id="game">
+<canvas id="cv" width="140" height="84"></canvas><div id="lb"></div>
+<div id="bar"><span id="hint"></span><label>Attack <b id="pv">40%</b> <input type="range" id="pct" min="5" max="100" value="40"></label></div>
+<div id="end"><div id="etx"></div><button class="go" id="bExit">Back to menu</button></div></section>
+
+<script>
+const W=140,H=84,$=s=>document.querySelector(s);
+const MAPS=[{n:'Continents',s:7,sc:.07,t:.52,f:.55},{n:'Archipelago',s:21,sc:.14,t:.72,f:.2},{n:'Pangaea',s:3,sc:.05,t:.4,f:.5},{n:'Twin Lands',s:42,sc:.09,t:.62,f:.6,tw:1}];
+const BN=['Persia','Rome','Egypt','Mongols','Maya','Vikings','Zulu','Inca','Khmer','Aztec','Ottoman','Han','Celts','Maori','Nubia','Sparta','Hittites','Aksum','Siam','Dacia','Franks','Goths','Mali','Olmec'];
+function h(x,y,s){let n=Math.sin(x*127.1+y*311.7+s*74.7)*43758.5453;return n-Math.floor(n)}
+function vn(x,y,s){const a=Math.floor(x),b=Math.floor(y),xf=x-a,yf=y-b,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+return h(a,b,s)*(1-u)*(1-v)+h(a+1,b,s)*u*(1-v)+h(a,b+1,s)*(1-u)*v+h(a+1,b+1,s)*u*v}
+function genMap(m){const L=new Uint8Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+const v=vn(x*m.sc,y*m.sc,m.s)*.6+vn(x*m.sc*2.3,y*m.sc*2.3,m.s+5)*.3+vn(x*m.sc*5,y*m.sc*5,m.s+9)*.1;
+const nx=x/W,ny=y/H,d=m.tw?Math.min(Math.hypot(nx-.27,ny-.5),Math.hypot(nx-.73,ny-.5))*1.8:Math.hypot(nx-.5,ny-.5)*1.6;
+L[y*W+x]=v-m.f*d+.25>m.t?1:0}return L}
+const pack=(r,g,b)=>(0xFF000000|b<<16|g<<8|r)>>>0;
+const WATER=pack(14,42,74),LAND=pack(122,138,92);
+function hsl(hh){const f=n=>{const k=(n+hh/30)%12;return Math.round(255*(.55-.315*Math.max(-1,Math.min(k-3,9-k,1))))};return[f(0),f(8),f(4)]}
+const mkP=(name,i,human)=>{const c=hsl((i*137.5)%360);return{name,col:pack(...c),css:`rgb(${c})`,troops:0,tiles:0,alive:true,human,spawned:false}};
+let myId=Math.random().toString(36).slice(2,8),bc=new BroadcastChannel('frontline'),lobby=null,joined=null,seen={},G=null,loop=null,lt=null,selMap=0;
+const show=id=>document.querySelectorAll('.scr').forEach(s=>s.classList.toggle('on',s.id===id));
+const nm=()=>$('#nm').value.trim().slice(0,14)||'Player';
+
+// ---- menus
+MAPS.forEach((m,i)=>{const d=document.createElement('div');d.className='map'+(i?'':' sel');d.innerHTML=`<canvas width="${W}" height="${H}"></canvas>${m.n}`;
+const c=d.firstChild.getContext('2d'),im=c.createImageData(W,H),u=new Uint32Array(im.data.buffer),L=genMap(m);
+for(let k=0;k<W*H;k++)u[k]=L[k]?LAND:WATER;c.putImageData(im,0,0);
+d.onclick=()=>{selMap=i;document.querySelectorAll('.map').forEach((e,j)=>e.classList.toggle('sel',j===i))};$('#maps').append(d)});
+$('#bCreate').onclick=()=>show('create');$('#bJoin').onclick=()=>{show('join');renderOpen()};
+$('#bBack1').onclick=$('#bBack2').onclick=()=>show('home');
+$('#bOpen').onclick=()=>{const code=Array.from({length:4},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random()*24|0]).join('');
+lobby={code,map:selMap,bots:Math.max(0,Math.min(24,+$('#bots').value||0)),players:[{id:myId,name:nm()}],host:true};
+lt=setInterval(()=>bc.postMessage({t:'lobby',code,map:selMap,n:lobby.players.length,bots:lobby.bots}),1000);renderLobby()};
+function renderLobby(){show('lobby');$('#lcode').textContent=lobby?lobby.code:joined;
+const names=lobby?lobby.players.map(p=>p.name):(window.rost||[]);
+$('#linfo').textContent=lobby?`${MAPS[lobby.map].n} · ${lobby.bots} bots`:'Waiting for the host to start';
+$('#roster').innerHTML=names.map(n=>`<div class="card" style="cursor:default;font-size:16px;margin:6px 0;padding:10px">${n.replace(/</g,'&lt;')}</div>`).join('');
+$('#bStart').style.display=lobby?'':'none'}
+function sendRoster(){bc.postMessage({t:'roster',code:lobby.code,names:lobby.players.map(p=>p.name)})}
+function renderOpen(){const now=Date.now();const l=Object.values(seen).filter(s=>now-s.at<3000);
+$('#open').innerHTML=l.length?'':'<p class="note">No open lobbies yet. Create one in another tab.</p>';
+l.forEach(s=>{const b=document.createElement('button');b.className='lob';b.innerHTML=`<span>${s.code} · ${MAPS[s.map].n}</span><span>${s.n} players + ${s.bots} bots</span>`;b.onclick=()=>joinCode(s.code);$('#open').append(b)})}
+setInterval(()=>{if($('#join').classList.contains('on'))renderOpen()},1000);
+function joinCode(c){c=c.trim().toUpperCase();if(c.length!==4)return;joined=c;window.rost=[];bc.postMessage({t:'join',code:c,id:myId,name:nm()});renderLobby()}
+$('#bJC').onclick=()=>joinCode($('#jc').value);
+$('#bLeave').onclick=$('#bExit').onclick=leave;
+function leave(){clearInterval(lt);clearInterval(loop);lobby=joined=G=null;$('#end').style.display='none';show('home')}
+
+// ---- game setup
+function newGame(mi,bots,hum,mode,code,meId){const L=genMap(MAPS[mi]),P=[null];
+hum.forEach((p,k)=>P.push(mkP(p.name,k+1,true)));for(let b=0;b<bots;b++)P.push(mkP(BN[b%BN.length],P.length,false));
+const g={mode,code,L,owner:new Uint8Array(W*H),P,att:[],phase:'spawn',t:0,land:L.reduce((a,b)=>a+b,0),me:1+hum.findIndex(p=>p.id===meId),winner:''};
+if(mode!=='client')P.forEach((p,i)=>{if(p&&!p.human)rspawn(g,i)});return g}
+function spawnAt(g,i,x,y){const p=g.P[i];if(p.spawned||x<0||y<0||x>=W||y>=H||!g.L[y*W+x]||g.owner[y*W+x])return false;
+for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const X=x+dx,Y=y+dy;if(dx*dx+dy*dy<=10&&X>=0&&Y>=0&&X<W&&Y<H&&g.L[Y*W+X]&&!g.owner[Y*W+X])g.owner[Y*W+X]=i}
+p.spawned=true;p.troops=600;return true}
+function rspawn(g,i){for(let k=0;k<300;k++){const x=4+Math.random()*(W-8)|0,y=4+Math.random()*(H-8)|0;let ok=g.L[y*W+x]===1;
+for(let dy=-7;dy<=7&&ok;dy+=2)for(let dx=-7;dx<=7;dx+=2){const X=x+dx,Y=y+dy;if(X>=0&&Y>=0&&X<W&&Y<H&&g.owner[Y*W+X]){ok=false;break}}
+if(ok&&spawnAt(g,i,x,y))return}}
+$('#bStart').onclick=()=>{clearInterval(lt);const l=lobby;G=newGame(l.map,l.bots,l.players,'host',l.code,myId);G.ids=l.players.map(p=>p.id);
+bc.postMessage({t:'start',code:l.code,map:l.map,bots:l.bots,hum:l.players});run()};
+function run(){show('game');$('#end').style.display='none';clearInterval(loop);loop=setInterval(()=>{if(!G)return;if(G.mode!=='client'){tick();if(G.t%3===0)snap()}draw();hud()},100)}
+
+// ---- simulation
+const N4=[1,-1,W,-W];
+function launch(f,to,pct){const g=G,p=g.P[f],T=Math.floor(p.troops*pct);if(T<10)return;p.troops-=T;
+const a=g.att.find(a=>a.f===f&&a.to===to);if(a)a.troops+=T;else g.att.push({f,to,troops:T})}
+function cmd(pid,m){if(!pid||!G.P[pid])return;if(m.kind==='spawn')spawnAt(G,pid,m.x,m.y);
+else if(G.phase==='play'&&G.P[pid].alive&&m.to!==pid&&(m.to===0||(G.P[m.to]&&G.P[m.to].alive)))launch(pid,m.to,m.pct)}
+function tick(){const g=G;if(g.phase==='over')return;g.t++;const P=g.P,o=g.owner;
+if(g.phase==='spawn'){if(P.every(p=>!p||!p.human||p.spawned)||g.t>=200){P.forEach((p,i)=>{if(p&&!p.spawned)rspawn(g,i)});g.phase='play'}return}
+const keys=new Set(g.att.map(a=>a.f*256+a.to)),cand=new Map(),bord=P.map(()=>new Set());P.forEach(p=>p&&(p.tiles=0));
+for(let i=0;i<W*H;i++){if(!g.L[i])continue;const a=o[i],x=i%W;if(a)P[a].tiles++;else continue;
+for(let k=0;k<4;k++){if((k===0&&x===W-1)||(k===1&&x===0))continue;const j=i+N4[k];if(j<0||j>=W*H||!g.L[j])continue;const b=o[j];
+if(b!==a){bord[a].add(b);const key=a*256+b;if(keys.has(key)){let l=cand.get(key);if(!l)cand.set(key,l=[]);l.push(j)}}}}
+for(const a of g.att){const l=cand.get(a.f*256+a.to),D=P[a.to];
+if(!l||!P[a.f].alive){P[a.f].troops+=a.troops;a.troops=0;continue}
+let k=2+Math.ceil(l.length/6);
+while(k-->0&&l.length){const r=Math.random()*l.length|0,j=l[r];l[r]=l[l.length-1];l.pop();if(o[j]!==a.to)continue;
+const dd=D?D.troops/Math.max(D.tiles,1):0,c=D?Math.max(6,dd*1.3):5;if(a.troops<c){a.troops=0;break}
+a.troops-=c;if(D)D.troops=Math.max(0,D.troops-dd*.7);o[j]=a.f}}
+g.att=g.att.filter(a=>a.troops>=1&&P[a.f].alive);
+P.forEach((p,i)=>{if(!p||!p.alive||!p.spawned)return;if(!p.tiles&&g.t>5){p.alive=false;p.troops=0;return}
+p.troops+=Math.max(0,(1+p.tiles*.03+Math.pow(p.troops,.7)/50)*(1-p.troops/(4000+p.tiles*90)))});
+if(g.t%20===0)P.forEach((p,i)=>{if(!p||p.human||!p.alive||p.troops<300||g.att.some(a=>a.f===i))return;
+const b=[...bord[i]],en=b.filter(x=>x>0&&P[x].alive).sort((x,y)=>P[x].troops-P[y].troops);
+if(b.includes(0)&&(Math.random()<.7||!en.length))launch(i,0,.25+Math.random()*.25);else if(en.length)launch(i,en[0],.3+Math.random()*.2)});
+const hu=P.filter(p=>p&&p.human),top=P.reduce((m,p)=>p&&p.tiles>m.tiles?p:m,{tiles:0}),alive=P.filter(p=>p&&p.alive);
+if(top.tiles>=g.land*.75||alive.length<=1||hu.every(p=>!p.alive)){g.phase='over';g.winner=hu.every(p=>!p.alive)?'Eliminated':(top.name||'')+' wins'}}
+function snap(){const g=G;bc.postMessage({t:'snap',code:g.code,owner:g.owner.slice(),P:g.P.map(p=>p&&{troops:p.troops|0,tiles:p.tiles,alive:p.alive,spawned:p.spawned}),phase:g.phase,tt:g.t,winner:g.winner})}
+bc.onmessage=e=>{const m=e.data;
+if(m.t==='lobby'){seen[m.code]={...m,at:Date.now()}}
+else if(m.t==='join'&&lobby&&m.code===lobby.code&&!G&&lobby.players.length<8){if(!lobby.players.find(p=>p.id===m.id))lobby.players.push({id:m.id,name:m.name});sendRoster();renderLobby()}
+else if(m.t==='roster'&&m.code===joined&&!G){window.rost=m.names;renderLobby()}
+else if(m.t==='start'&&m.code===joined&&!G){G=newGame(m.map,m.bots,m.hum,'client',m.code,myId);clearInterval(lt);run()}
+else if(m.t==='cmd'&&G&&G.mode==='host'&&m.code===G.code){cmd(1+G.ids.indexOf(m.id),m)}
+else if(m.t==='snap'&&G&&G.mode==='client'&&m.code===G.code){G.owner.set(m.owner);m.P.forEach((p,i)=>p&&Object.assign(G.P[i],p));G.phase=m.phase;G.t=m.tt;G.winner=m.winner}};
+
+// ---- rendering & input
+const cv=$('#cv'),cx=cv.getContext('2d'),img=cx.createImageData(W,H),u32=new Uint32Array(img.data.buffer);
+function draw(){const g=G,o=g.owner;for(let i=0;i<W*H;i++){let c;if(!g.L[i])c=WATER;else{const a=o[i];if(!a)c=LAND;else{c=g.P[a].col;const x=i%W;
+if((x<W-1&&o[i+1]!==a)||(i+W<W*H&&o[i+W]!==a))c=((c>>>1)&0x7F7F7F|0xFF000000)>>>0}}u32[i]=c}cx.putImageData(img,0,0)}
+function hud(){const g=G,me=g.P[g.me];
+$('#hint').textContent=g.phase==='spawn'?`Tap land to choose your start · ${Math.max(0,Math.ceil((200-g.t)/10))}s`:
+me.alive?`Troops ${me.troops|0} · Land ${(me.tiles/g.land*100).toFixed(1)}%`:'You were eliminated';
+$('#lb').innerHTML=g.P.map((p,i)=>p&&{p,i}).filter(x=>x&&x.p.alive).sort((a,b)=>b.p.tiles-a.p.tiles).slice(0,8)
+.map(x=>`<div><i style="background:${x.p.css}"></i>${x.p.name.replace(/</g,'&lt;')}${x.i===g.me?' (you)':''} ${(x.p.tiles/g.land*100).toFixed(1)}%</div>`).join('');
+if(g.phase==='over'){$('#end').style.display='flex';$('#etx').textContent=g.winner}}
+$('#pct').oninput=e=>$('#pv').textContent=e.target.value+'%';
+cv.onpointerdown=e=>{if(!G||G.phase==='over')return;const r=cv.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)/r.width*W),y=Math.floor((e.clientY-r.top)/r.height*H);
+if(x<0||y<0||x>=W||y>=H||!G.L[y*W+x])return;
+const m=G.phase==='spawn'?{kind:'spawn',x,y}:{kind:'atk',to:G.owner[y*W+x],pct:$('#pct').value/100};
+if(G.mode==='client')bc.postMessage({t:'cmd',code:G.code,id:myId,...m});else cmd(G.me,m)};
+</script></body></html>
